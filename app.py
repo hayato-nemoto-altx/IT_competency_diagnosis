@@ -11,11 +11,7 @@ try:
 except:
     api_key = "AIzaSyDL4wYME9YvZ2r0IbtYQjnqA9hK0Jdb0aY"
 
-# APIキーが未設定の場合の警告
-if api_key == "AIzaSyDL4wYME9YvZ2r0IbtYQjnqA9hK0Jdb0aY":
-    st.warning("⚠️ APIキーが設定されていません。コード内の `api_key` 変数を設定するか、Streamlit Secretsを設定してください。")
-else:
-    genai.configure(api_key=api_key)
+genai.configure(api_key=api_key)
 
 # --- 2. 質問データベース（34資質×5問：IT企業・ビジネス研修向け） ---
 QUESTIONS_DB = {
@@ -267,7 +263,7 @@ QUESTIONS_DB = {
 }
 
 # --- 3. UI構築 ---
-st.set_page_config(page_title="簡易ストレングスファインダー（IT研修版）", layout="wide")
+st.set_page_config(page_title="簡易ストレングスファインダー", layout="wide")
 
 st.title("🧩 簡易ストレングスファインダー（IT研修版）")
 st.markdown("""
@@ -276,52 +272,71 @@ st.markdown("""
 """)
 st.info("💡 全34資質×5問＝計170問あります。所要時間は約10〜15分です。")
 
+# --- シャッフル処理（セッションステートで固定） ---
+if 'shuffled_questions' not in st.session_state:
+    # 質問DBをフラットなリストに変換
+    # [{"theme": "達成欲", "q": "質問文..."}, ...]
+    all_questions = []
+    for theme, q_list in QUESTIONS_DB.items():
+        for q in q_list:
+            all_questions.append({"theme": theme, "q": q})
+    
+    # シャッフル
+    random.shuffle(all_questions)
+    
+    # 保存
+    st.session_state['shuffled_questions'] = all_questions
+
+# 保存されたシャッフル済みリストを取得
+questions_to_display = st.session_state['shuffled_questions']
+
 # フォームの開始
 with st.form("assessment_form"):
-    scores = {}
+    scores = {theme: 0 for theme in QUESTIONS_DB.keys()} # スコア初期化
     
-    # 34資質をループ表示
     # 視認性を上げるため、2列レイアウトにする
     col1, col2 = st.columns(2)
     
-    themes = list(QUESTIONS_DB.keys())
-    half = len(themes) // 2
+    # 半分で分割
+    half = len(questions_to_display) // 2
     
     # 左カラム
     with col1:
-        for theme in themes[:half]:
-            with st.expander(f"📝 {theme}", expanded=True):
-                theme_score = 0
-                for i, q in enumerate(QUESTIONS_DB[theme]):
-                    ans = st.radio(
-                        f"Q.{i+1} {q}",
-                        options=[1, 2, 3, 4, 5],
-                        index=2, # デフォルト3
-                        horizontal=True,
-                        key=f"{theme}_{i}",
-                        help="1:全く当てはまらない ... 5:非常によく当てはまる"
-                    )
-                    theme_score += ans
-                scores[theme] = theme_score
+        for i, item in enumerate(questions_to_display[:half]):
+            q_text = item['q']
+            theme = item['theme']
+            
+            st.write(f"**Q.{i+1}**") # 質問番号
+            ans = st.radio(
+                f"{q_text}",
+                options=[1, 2, 3, 4, 5],
+                index=2, # デフォルト3
+                horizontal=True,
+                key=f"q_{i}", # ユニークなキー
+                help="1:全く当てはまらない ... 5:非常によく当てはまる"
+            )
+            st.write("---") # 区切り線
+            scores[theme] += ans # スコア加算
 
     # 右カラム
     with col2:
-        for theme in themes[half:]:
-            with st.expander(f"📝 {theme}", expanded=True):
-                theme_score = 0
-                for i, q in enumerate(QUESTIONS_DB[theme]):
-                    ans = st.radio(
-                        f"Q.{i+1} {q}",
-                        options=[1, 2, 3, 4, 5],
-                        index=2,
-                        horizontal=True,
-                        key=f"{theme}_{i}",
-                        help="1:全く当てはまらない ... 5:非常によく当てはまる"
-                    )
-                    theme_score += ans
-                scores[theme] = theme_score
+        for i, item in enumerate(questions_to_display[half:]):
+            idx = i + half # 通し番号
+            q_text = item['q']
+            theme = item['theme']
+            
+            st.write(f"**Q.{idx+1}**")
+            ans = st.radio(
+                f"{q_text}",
+                options=[1, 2, 3, 4, 5],
+                index=2,
+                horizontal=True,
+                key=f"q_{idx}",
+                help="1:全く当てはまらない ... 5:非常によく当てはまる"
+            )
+            st.write("---")
+            scores[theme] += ans
 
-    st.markdown("---")
     submitted = st.form_submit_button("📊 診断結果を表示する", use_container_width=True)
 
 # --- 4. 集計とAI分析 ---
@@ -331,14 +346,14 @@ if submitted:
     all_ranks_str = "\n".join([f"{i+1}. {item[0]} ({item[1]}点)" for i, item in enumerate(sorted_scores)])
 
     st.divider()
-    st.header("🏆 あなたのTOP5資質")
+    st.header("🏆 診断結果レポート")
     
     # 結果表示用カラム
     r_col1, r_col2 = st.columns([1, 2])
     
     with r_col1:
         st.subheader("全34資質の順位")
-        # データフレーム化して表示（高さ制限をつけてスクロール可能に）
+        # データフレーム化して表示
         df_all = pd.DataFrame(sorted_scores, columns=["資質名", "スコア"])
         df_all.index = df_all.index + 1 # 1位から表示
         st.dataframe(df_all, height=600, use_container_width=True)
@@ -381,7 +396,7 @@ if submitted:
 
         st.subheader("🤖 AIによる分析レポート")
         
-        if api_key == "AIzaSyDL4wYME9YvZ2r0IbtYQjnqA9hK0Jdb0aY":
+        if not api_key:
             st.error("APIキーが設定されていないため、AI分析を実行できません。")
         else:
             with st.spinner("AIがあなたの強みを分析し、レポートを作成中...（約30〜60秒かかります）"):
@@ -390,4 +405,5 @@ if submitted:
                     response = model.generate_content(prompt)
                     st.markdown(response.text)
                 except Exception as e:
+
                     st.error(f"分析中にエラーが発生しました: {e}")
