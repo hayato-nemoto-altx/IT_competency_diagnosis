@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import pandas as pd
-import matplotlib.pyplot as plt
+import random
 
 # --- 1. APIキーの設定 ---
 # Streamlit CloudのSecrets、またはローカルの環境変数から読み込む設計
@@ -407,3 +407,4 @@ if submitted:
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
