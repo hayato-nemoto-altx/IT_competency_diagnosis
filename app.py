@@ -9,9 +9,13 @@ import random
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except:
-    api_key = "AIzaSyDL4wYME9YvZ2r0IbtYQjnqA9hK0Jdb0aY"
+    api_key_str = None
 
-client = genai.Client(api_key=api_key)
+if not api_key_str:
+    st.warning("⚠️ APIキーが設定されていません。Streamlit Cloudの「Settings > Secrets」に `GEMINI_API_KEY` を設定してください。")
+    client = None
+else:
+    client = genai.Client(api_key=api_key_str)
 
 # --- 2. 質問データベース（34資質×5問：IT企業・ビジネス研修向け） ---
 QUESTIONS_DB = {
@@ -155,8 +159,8 @@ QUESTIONS_DB = {
     ],
     "成長促進": [
         "後輩や部下のメンターになり、彼らの成長を見るのが好きだ。",
-        "小さな進歩（Hello Worldが動いた等）でも、一緒に喜ぶことができる。",
-        "完成されたコードを見るより、そこに至るまでの試行錯誤のプロセスを評価する。",
+        "後輩の小さな進歩でも、一緒に喜ぶことができる。",
+        "完成された成果物より、そこに至るまでの試行錯誤のプロセスを評価する。",
         "人の潜在能力を見抜き、適材適所の役割を与えるのが得意だ。",
         "「教えること」は自分自身の学びにもなると感じる。"
     ],
@@ -410,6 +414,7 @@ if submitted:
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
 
 
 
