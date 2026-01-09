@@ -15,7 +15,7 @@ if not api_key:
     st.warning("⚠️ APIキーが設定されていません。Streamlit Cloudの「Settings > Secrets」に `GEMINI_API_KEY` を設定してください。")
     client = None
 else:
-    client = genai.Client(api_key=api_key_str)
+    client = genai.Client(api_key=api_key)
 
 # --- 2. 質問データベース（34資質×5問：IT企業・ビジネス研修向け） ---
 QUESTIONS_DB = {
@@ -414,6 +414,7 @@ if submitted:
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
 
 
 
