@@ -402,12 +402,13 @@ if submitted:
         else:
             with st.spinner("AIがあなたの強みを分析し、レポートを作成中...（約30〜60秒かかります）"):
                 try:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-3-flash')
                     response = model.generate_content(prompt)
                     st.markdown(response.text)
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
 
 
 
