@@ -9,9 +9,9 @@ import random
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except:
-    api_key_str = None
+    api_key = None
 
-if not api_key_str:
+if not api_key:
     st.warning("⚠️ APIキーが設定されていません。Streamlit Cloudの「Settings > Secrets」に `GEMINI_API_KEY` を設定してください。")
     client = None
 else:
@@ -414,6 +414,7 @@ if submitted:
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
 
 
 
