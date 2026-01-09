@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import pandas as pd
 import random
 
@@ -11,7 +11,7 @@ try:
 except:
     api_key = "AIzaSyDL4wYME9YvZ2r0IbtYQjnqA9hK0Jdb0aY"
 
-genai.configure(api_key=api_key)
+client = genai.Client(api_key=api_key)
 
 # --- 2. 質問データベース（34資質×5問：IT企業・ビジネス研修向け） ---
 QUESTIONS_DB = {
@@ -397,17 +397,20 @@ if submitted:
 
         st.subheader("🤖 AIによる分析レポート")
         
-        if not api_key:
-            st.error("APIキーが設定されていないため、AI分析を実行できません。")
+        if not client:
+            st.error("APIキーが設定されていないため実行できません。")
         else:
             with st.spinner("AIがあなたの強みを分析し、レポートを作成中...（約30〜60秒かかります）"):
                 try:
-                    model = genai.GenerativeModel('gemini-3-flash')
-                    response = model.generate_content(prompt)
+                    response = client.models.generate_content(
+                        model="gemini-3-flash-preview",
+                        contents=prompt,
+                    )
                     st.markdown(response.text)
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
 
 
 
