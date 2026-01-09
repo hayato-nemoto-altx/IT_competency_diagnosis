@@ -265,7 +265,7 @@ QUESTIONS_DB = {
 # --- 3. UI構築 ---
 st.set_page_config(page_title="簡易ストレングスファインダー", layout="wide")
 
-st.title("🧩 簡易ストレングスファインダー（IT研修版）")
+st.title("🧩 簡易ストレングスファインダー")
 st.markdown("""
 この診断は、あなたのビジネスにおける強みを分析するためのツールです。  
 日常業務やプロジェクトでの行動を思い浮かべながら、直感で回答してください。
@@ -408,5 +408,6 @@ if submitted:
                 except Exception as e:
 
                     st.error(f"分析中にエラーが発生しました: {e}")
+
 
 
