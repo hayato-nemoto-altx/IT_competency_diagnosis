@@ -3,93 +3,308 @@ from google import genai
 import pandas as pd
 import random
 import io
+import re
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ReportLab関連
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.lib.units import mm
+from reportlab.lib.units import mm, cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+# Google API関連
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-import re
 
 # --- 1. 設定と関数定義 ---
+# 4つの領域定義
+DOMAIN_NAMES = ["実行力", "影響力", "人間関係構築力", "戦略的思考力"]
+DOMAIN_COLORS_RT = { # レーダーチャート用
+    "実行力": "#9b59b6", # 紫
+    "影響力": "#f1c40f", # 黄
+    "人間関係構築力": "#3498db", # 青
+    "戦略的思考力": "#2ecc71"  # 緑
+}
+# 資質と領域のマッピング
+THEME_TO_DOMAIN = {
+    "達成欲": "実行力", "アレンジ": "実行力", "信念": "実行力", "公平性": "実行力", "慎重さ": "実行力", "規律性": "実行力", "目標志向": "実行力", "責任感": "実行力", "回復志向": "実行力",
+    "活発性": "影響力", "指令性": "影響力", "コミュニケーション": "影響力", "競争性": "影響力", "最上志向": "影響力", "自己確信": "影響力", "自我": "影響力", "社交性": "影響力",
+    "適応性": "人間関係構築力", "運命思考": "人間関係構築力", "成長促進": "人間関係構築力", "共感性": "人間関係構築力", "調和性": "人間関係構築力", "包含": "人間関係構築力", "個別化": "人間関係構築力", "ポジティブ": "人間関係構築力", "親密性": "人間関係構築力",
+    "分析思考": "戦略的思考力", "原点思考": "戦略的思考力", "未来志向": "戦略的思考力", "着想": "戦略的思考力", "収集心": "戦略的思考力", "内省": "戦略的思考力", "学習欲": "戦略的思考力", "戦略性": "戦略的思考力"
+}
+# PDFテーブル用の色設定
+DOMAIN_BG_COLORS = {
+    "実行力": colors.lavender,
+    "影響力": colors.lightyellow,
+    "人間関係構築力": colors.aliceblue,
+    "戦略的思考力": colors.honeydew,
+}
+
+# レーダーチャート作成関数
+def create_radar_chart(scores_by_domain):
+    # データ準備
+    labels = DOMAIN_NAMES
+    # 領域ごとの資質数で割って平均点にする場合
+    # counts = {"実行力": 9, "影響力": 8, "人間関係構築力": 9, "戦略的思考力": 8}
+    # values = [scores_by_domain[d] / counts[d] for d in labels]
+    # 合計点のまま表示する場合（今回はこちらを採用）
+    values = [scores_by_domain[d] for d in labels]
+    
+    num_vars = len(labels)
+    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+    values += values[:1] # 閉じた多角形にするため最初のデータを最後に追加
+    angles += angles[:1]
+
+    # プロット設定
+    fig, ax = plt.subplots(figsize=(4, 4), subplot_kw=dict(polar=True))
+    
+    # Y軸の目盛り（グリッド）設定
+    max_val = max(values) if values else 25 # 最大値に応じて調整（ここでは適当に25）
+    yticks = np.linspace(0, max_val, 5) # 5分割
+    ax.set_yticks(yticks)
+    ax.set_yticklabels([]) # 数値は表示しない
+    ax.set_rlabel_position(0)
+
+    # X軸（ラベル）設定
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels, fontdict={'fontsize': 12, 'fontweight': 'bold'})
+    # 日本語フォント設定（環境に合わせて変更が必要な場合があります）
+    plt.rcParams['font.family'] = 'sans-serif'
+
+    # データプロット
+    ax.plot(angles, values, color='#34495e', linewidth=2, linestyle='solid')
+    ax.fill(angles, values, color='#34495e', alpha=0.25)
+    
+    # 領域ごとに色分けした点を打つ
+    for i, (angle, val) in enumerate(zip(angles[:-1], values[:-1])):
+        color = DOMAIN_COLORS_RT[labels[i]]
+        ax.plot(angle, val, marker='o', color=color, markersize=8)
+
+    # 余白調整
+    plt.tight_layout(pad=1)
+    
+    # 画像バッファに保存
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, transparent=True)
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
 # PDF作成関数
-def create_pdf(name, rank_data, ai_text):
+def create_pdf(name, all_ranked_data, domain_scores, ai_text):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, title="Strength Report")
+    # 余白を意識した設定（上下左右の余白を広めに取る）
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4,
+        rightMargin=20*mm, leftMargin=20*mm,
+        topMargin=25*mm, bottomMargin=25*mm
+    )
     pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
     
     elements = []
+    
+    # --- スタイル定義 (階層構造と余白) ---
     styles = getSampleStyleSheet()
-    jp_style = ParagraphStyle(name='Japanese', fontName='HeiseiKakuGo-W5', fontSize=10, leading=14)
-    title_style = ParagraphStyle(name='JpTitle', fontName='HeiseiKakuGo-W5', fontSize=18, leading=22, alignment=1)
-    h2_style = ParagraphStyle(name='JpH2', fontName='HeiseiKakuGo-W5', fontSize=14, leading=18, spaceBefore=10, spaceAfter=5)
+    # タイトル
+    title_style = ParagraphStyle(
+        name='JpTitle', fontName='HeiseiKakuGo-W5', fontSize=24, leading=30, alignment=TA_CENTER, spaceAfter=20*mm
+    )
+    # 大見出し（H1相当）
+    h1_style = ParagraphStyle(
+        name='JpH1', fontName='HeiseiKakuGo-W5', fontSize=18, leading=22, 
+        spaceBefore=15*mm, spaceAfter=10*mm, textColor=colors.navy,
+        borderPadding=5, borderWidth=0, borderColor=colors.navy, backColor=colors.whitesmoke # 簡易的な背景帯
+    )
+    # 中見出し（H2相当：AIテキスト内で使用）
+    h2_style = ParagraphStyle(
+        name='JpH2', fontName='HeiseiKakuGo-W5', fontSize=14, leading=18,
+        spaceBefore=12*mm, spaceAfter=6*mm, textColor=colors.darkblue
+    )
+    # 本文
+    body_style = ParagraphStyle(
+        name='JpBody', fontName='HeiseiKakuGo-W5', fontSize=10.5, leading=18, # 行間を広めに
+        spaceAfter=3*mm, alignment=TA_LEFT
+    )
+    # キャプション
+    caption_style = ParagraphStyle(
+        name='JpCaption', fontName='HeiseiKakuGo-W5', fontSize=9, leading=12, textColor=colors.grey, alignment=TA_CENTER
+    )
 
-    elements.append(Paragraph(f"ストレングス分析レポート: {name}さん", title_style))
-    elements.append(Spacer(1, 10*mm))
+    # =========================================
+    # ページ1: タイトルと全体サマリー（チャート＆Top10）
+    # =========================================
+    elements.append(Paragraph(f"ストレングス分析レポート", title_style))
+    elements.append(Paragraph(f"回答者: {name} さん", ParagraphStyle(name='sub', parent=title_style, fontSize=14, spaceAfter=30*mm)))
 
-    # スコア上位の表
-    data = [["順位", "資質名", "スコア"]]
-    for rank, (theme, score) in enumerate(rank_data[:34]):
-        data.append([str(rank+1), theme, str(score)])
+    elements.append(Paragraph("■ 強みの全体構成（4領域バランスとTop10）", h1_style))
+
+    # --- ② レーダーチャート画像生成 ---
+    radar_buf = create_radar_chart(domain_scores)
+    radar_img = Image(radar_buf, width=80*mm, height=80*mm)
     
-    table = Table(data, colWidths=[20*mm, 60*mm, 30*mm])
-    table.setStyle(TableStyle([
+    # --- Top10 テーブル作成 ---
+    top10_data = [["順位", "資質名", "領域", "スコア"]]
+    t10_cmds = [
         ('FONT', (0,0), (-1,-1), 'HeiseiKakuGo-W5', 10),
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+        ('BACKGROUND', (0,0), (-1,0), colors.midnightblue),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('PADDING', (0,0), (-1,-1), 5),
+    ]
+    for i, (theme, score) in enumerate(all_ranked_data[:10]):
+        domain = THEME_TO_DOMAIN.get(theme, "-")
+        bg_color = DOMAIN_BG_COLORS.get(domain, colors.white)
+        top10_data.append([str(i+1), theme, domain, str(score)])
+        t10_cmds.append(('BACKGROUND', (0, i+1), (-1, i+1), bg_color))
+
+    top10_table = Table(top10_data, colWidths=[12*mm, 35*mm, 25*mm, 15*mm])
+    top10_table.setStyle(TableStyle(t10_cmds))
+
+    # --- チャートとテーブルを横並び配置 ---
+    # 1行2列の透明なテーブルに入れてレイアウトする
+    layout_data = [[radar_img, top10_table]]
+    layout_table = Table(layout_data, colWidths=[90*mm, 90*mm])
+    layout_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (0,0), 'CENTER'), # 左セル（チャート）は中央寄せ
+        ('ALIGN', (1,0), (1,0), 'LEFT'),   # 右セル（表）は左寄せ
+        ('VALIGN', (0,0), (-1,-1), 'TOP'), # 上揃え
     ]))
-    elements.append(Paragraph("【資質スコア順位】", h2_style))
-    elements.append(table)
-    elements.append(Spacer(1, 10*mm))
-    elements.append(PageBreak())
-    # AI分析
-    elements.append(Paragraph("【AI分析レポート】", title_style))
+    elements.append(layout_table)
+    # キャプション追加
     elements.append(Spacer(1, 5*mm))
-    lines = ai_text.split('\n')
-    is_first_header = True
+    elements.append(Paragraph("※レーダーチャートは各領域のスコア合計値を示しています。", caption_style))
     
-    for line in lines:
+    # ④ ここで1回だけ改ページ
+    elements.append(PageBreak())
+
+    # =========================================
+    # ページ2: 全34資質の詳細リスト（2段組み表示）
+    # =========================================
+    elements.append(Paragraph("■ 全34資質の順位一覧", h1_style))
+
+    # データを左右に分割（17個ずつ）
+    half_idx = (len(all_ranked_data) + 1) // 2
+    left_data = all_ranked_data[:half_idx]
+    right_data = all_ranked_data[half_idx:]
+
+    # 2段組み用のデータ構造を作成（左データ, 空白, 右データ）
+    # ヘッダー行
+    full_table_data = [["順位", "資質名", "領域", "スコア", "", "順位", "資質名", "領域", "スコア"]]
+    
+    ft_cmds = [
+        ('FONT', (0,0), (-1,-1), 'HeiseiKakuGo-W5', 9), # 少しフォント小さく
+        # 左側のスタイル
+        ('GRID', (0,0), (3,-1), 0.25, colors.lightgrey),
+        ('BACKGROUND', (0,0), (3,0), colors.midnightblue),
+        # 右側のスタイル
+        ('GRID', (5,0), (8,-1), 0.25, colors.lightgrey),
+        ('BACKGROUND', (5,0), (8,0), colors.midnightblue),
+        # 共通ヘッダー文字色
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]
+
+    # データ行の作成
+    max_rows = len(left_data)
+    for i in range(max_rows):
+        row_data = []
+        # 左側データ追加
+        l_item = left_data[i]
+        l_rank = i + 1
+        l_domain = THEME_TO_DOMAIN.get(l_item[0], "-")
+        l_bg = DOMAIN_BG_COLORS.get(l_domain, colors.white)
+        row_data.extend([str(l_rank), l_item[0], l_domain, str(l_item[1])])
+        ft_cmds.append(('BACKGROUND', (0, i+1), (3, i+1), l_bg))
+        
+        # 中央の空白列
+        row_data.append("")
+
+        # 右側データ追加（存在する場合）
+        if i < len(right_data):
+            r_item = right_data[i]
+            r_rank = i + 1 + half_idx
+            r_domain = THEME_TO_DOMAIN.get(r_item[0], "-")
+            r_bg = DOMAIN_BG_COLORS.get(r_domain, colors.white)
+            row_data.extend([str(r_rank), r_item[0], r_domain, str(r_item[1])])
+            ft_cmds.append(('BACKGROUND', (5, i+1), (8, i+1), r_bg))
+        else:
+            # 右側にデータがない場合は空白埋め
+            row_data.extend(["", "", "", ""])
+        
+        full_table_data.append(row_data)
+
+    # カラム幅の設定（左4列 + 空白1列 + 右4列）
+    col_widths = [10*mm, 30*mm, 25*mm, 12*mm] * 2
+    col_widths.insert(4, 10*mm) # 真ん中に10mmの空白列
+
+    full_table = Table(full_table_data, colWidths=col_widths, repeatRows=1)
+    full_table.setStyle(TableStyle(ft_cmds))
+    elements.append(full_table)
+
+    # ④ 2回目の改ページ
+    elements.append(PageBreak())
+
+    # =========================================
+    # ページ3: AI分析レポート
+    # =========================================
+    elements.append(Paragraph("■ AIによるプロファイリング分析", h1_style))
+
+    # Markdown整形処理
+    
+    # 見出し判定用の正規表現コンパイル
+    h_pattern = re.compile(r'^(#+)\s*(.*)')
+
+    for line in ai_text.split('\n'):
         line = line.strip()
         if not line:
+            elements.append(Spacer(1, 4*mm)) # 空行は少し狭めに
             continue
 
+        # エスケープ処理
         line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        # 太字変換
         line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
 
-        if line.startswith('###'):
-            clean_text = line.replace('###', '').strip()
-            
-            # 最初の見出し以外（2つ目以降の見出し）の場合に改ページする
-            if not is_first_header:
-                elements.append(PageBreak())
-            
+        # 見出しマッチング
+        match = h_pattern.match(line)
+        if match:
+            # level = len(match.group(1)) # #の数（今回はすべて同じスタイルにする）
+            clean_text = match.group(2) # 記号を除去したテキスト
             elements.append(Paragraph(clean_text, h2_style))
-            is_first_header = False # 2回目以降は改ページ有効にする
-        
-        elif line.startswith('##'):
-            clean_text = line.replace('##', '').strip()
-            if not is_first_header:
-                elements.append(PageBreak())
-            elements.append(Paragraph(clean_text, h2_style))
-            is_first_header = False
-
+            
         elif line.startswith('- ') or line.startswith('* '):
+            # リスト項目
             clean_text = line[2:].strip()
-            elements.append(Paragraph(f"• {clean_text}", jp_style))
-
-        else:
-            elements.append(Paragraph(line, jp_style))
+            # 箇条書き用のインデントスタイルを適用
+            list_style = ParagraphStyle(
+                name='JpList', parent=body_style,
+                leftIndent=5*mm, firstLineIndent=-5*mm # ぶら下げインデント
+            )
+            elements.append(Paragraph(f"• {clean_text}", list_style))
         
-        elements.append(Spacer(1, 2*mm))
+        elif line == "---":
+            # 区切り線
+            elements.append(Spacer(1, 5*mm))
+            # elements.append(HRFlowable(width="100%", thickness=1, color=colors.lightgrey)) # 線を引きたい場合
+            elements.append(Spacer(1, 5*mm))
+            
+        else:
+            # 通常の段落
+            elements.append(Paragraph(line, body_style))
 
+    # PDF生成
     doc.build(elements)
     buffer.seek(0)
     return buffer
@@ -483,6 +698,13 @@ if submitted:
             # スコア集計
             sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
             all_ranks_str = "\n".join([f"{i+1}. {item[0]} ({item[1]}点)" for i, item in enumerate(sorted_scores)])
+            
+            # 領域別スコア集計
+            domain_scores = {d: 0 for d in DOMAIN_NAMES}
+            for theme, score in scores.items():
+                domain = THEME_TO_DOMAIN.get(theme)
+                if domain:
+                    domain_scores[domain] += score
 
             ai_text = "（AI分析エラー）"
             if client:
@@ -529,7 +751,7 @@ if submitted:
                     ai_text = f"AI分析中にエラーが発生しました: {e}"
 
             #  PDF生成 (メモリ上)
-            pdf_buffer = create_pdf(user_name, sorted_scores, ai_text)
+            pdf_buffer = create_pdf(user_name, sorted_scores, domain_scores, ai_text)
             pdf_bytes = pdf_buffer.getvalue() # バイナリデータを取り出しておく
             save_msg = "※バックアップ保存機能は無効化されています"
             # 【自動実行】Googleドライブへ保存　一時的に無効化
@@ -548,6 +770,7 @@ if submitted:
             st.session_state['result_data'] = {
                 'name': user_name,
                 'scores': sorted_scores,
+                'domain_scores': domain_scores,
                 'ai_text': ai_text,
                 'pdf_bytes': pdf_bytes,
                 'save_msg': save_msg
@@ -564,6 +787,10 @@ if 'result_data' in st.session_state:
     #     st.success(res['save_msg'])
     # else:
     st.warning(res['save_msg'])
+
+    st.subheader("領域別バランス")
+    radar_buf_web = create_radar_chart(res['domain_scores'])
+    st.image(radar_buf_web, caption="レーダーチャート", width=400)
     
     # 結果表示用カラム
     r_col1, r_col2 = st.columns([1, 2])
@@ -591,6 +818,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
