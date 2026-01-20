@@ -57,7 +57,7 @@ def setup_japanese_font():
     font_path = "ipaexg.ttf" 
 
 if not os.path.exists(font_path):
-    st.error(f"⚠️ エラー: フォントファイル `{FONT_FILE}` が見つかりません。")
+    st.error(f"⚠️ エラー: フォントファイル `{font_path}` が見つかりません。")
     st.info("【解決策】 `ipaexg.ttf` をダウンロードし、`app.py` と同じ場所にアップロードしてください。")
     st.stop()
 
@@ -844,6 +844,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
