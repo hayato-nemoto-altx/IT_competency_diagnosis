@@ -53,24 +53,28 @@ DOMAIN_BG_COLORS = {
 
 # --- フォント設定 ---
 # フォルダにあるフォントファイル名を指定
-font_path = "ipaexg.ttf" 
+FONT_FILE = "ipaexg.ttf"
+REGISTERED_FONT_NAME = "IPAexGothic"
 
-if not os.path.exists(font_path):
-    st.error(f"⚠️ エラー: フォントファイル `{font_path}` が見つかりません。")
+if not os.path.exists(FONT_FILE):
+    st.error(f"⚠️ エラー: フォントファイル `{FONT_FILE}` が見つかりません。")
     st.info("【解決策】 `ipaexg.ttf` をダウンロードし、`app.py` と同じ場所にアップロードしてください。")
     st.stop()
 
-# Matplotlib用のフォント設定
-fm.fontManager.addfont(font_path)
-font_prop = fm.FontProperties(fname=font_path)
-plt.rcParams['font.family'] = font_prop.get_name()
-        
-# ReportLab用のフォント登録（埋め込みフォントとして登録）
+# フォント登録処理
 try:
-    pdfmetrics.registerFont(TTFont('IPAexGothic', font_path))
-    PDF_FONT_NAME = 'IPAexGothic' # 成功したらこのフォント名を使う
-except:
-    st.error(f"フォント登録エラー: {e}")
+    # 1. Matplotlibへの登録 (グラフ用)
+    fm.fontManager.addfont(FONT_FILE)
+    font_prop = fm.FontProperties(fname=FONT_FILE)
+    plt.rcParams['font.family'] = font_prop.get_name()
+
+    # 2. ReportLabへの登録 (PDF用)
+    # 既に登録されているかチェックしてから登録（リロード時のエラー防止）
+    if REGISTERED_FONT_NAME not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont(REGISTERED_FONT_NAME, FONT_FILE))
+
+except Exception as e:
+    st.error(f"フォント登録中にエラーが発生しました: {e}")
     st.stop()
 
 # レーダーチャート作成関数
@@ -135,31 +139,31 @@ def create_pdf(name, all_ranked_data, domain_scores, ai_text):
     
     elements = []
     
-    # --- スタイル定義 (階層構造と余白) ---
+    # --- スタイル定義  ---
     styles = getSampleStyleSheet()
     # タイトル
     title_style = ParagraphStyle(
-        name='JpTitle', fontName=PDF_FONT_NAME, fontSize=24, leading=30, alignment=TA_CENTER, spaceAfter=20*mm
+        name='JpTitle', fontName=REGISTERED_FONT_NAME, fontSize=24, leading=30, alignment=TA_CENTER, spaceAfter=20*mm
     )
     # 大見出し（H1相当）
     h1_style = ParagraphStyle(
-        name='JpH1', fontName=PDF_FONT_NAME, fontSize=18, leading=22, 
+        name='JpH1', fontName=REGISTERED_FONT_NAME, fontSize=18, leading=22, 
         spaceBefore=15*mm, spaceAfter=10*mm, textColor=colors.navy,
         borderPadding=5, borderWidth=0, borderColor=colors.navy, backColor=colors.whitesmoke # 簡易的な背景帯
     )
     # 中見出し（H2相当：AIテキスト内で使用）
     h2_style = ParagraphStyle(
-        name='JpH2', fontName=PDF_FONT_NAME, fontSize=14, leading=18,
+        name='JpH2', fontName=REGISTERED_FONT_NAME, fontSize=14, leading=18,
         spaceBefore=12*mm, spaceAfter=6*mm, textColor=colors.darkblue
     )
     # 本文
     body_style = ParagraphStyle(
-        name='JpBody', fontName=PDF_FONT_NAME, fontSize=10.5, leading=18, # 行間を広めに
+        name='JpBody', fontName=REGISTERED_FONT_NAME, fontSize=10.5, leading=18, # 行間を広めに
         spaceAfter=3*mm, alignment=TA_LEFT
     )
     # キャプション
     caption_style = ParagraphStyle(
-        name='JpCaption', fontName=PDF_FONT_NAME, fontSize=9, leading=12, textColor=colors.grey, alignment=TA_CENTER
+        name='JpCaption', fontName=REGISTERED_FONT_NAME, fontSize=9, leading=12, textColor=colors.grey, alignment=TA_CENTER
     )
 
     # =========================================
@@ -177,7 +181,7 @@ def create_pdf(name, all_ranked_data, domain_scores, ai_text):
     # --- Top10 テーブル作成 ---
     top10_data = [["順位", "資質名", "領域", "スコア"]]
     t10_cmds = [
-        ('FONT', (0,0), (-1,-1), PDF_FONT_NAME, 10),
+        ('FONT', (0,0), (-1,-1), REGISTERED_FONT_NAME, 10),
         ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
         ('BACKGROUND', (0,0), (-1,0), colors.midnightblue),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -226,7 +230,7 @@ def create_pdf(name, all_ranked_data, domain_scores, ai_text):
     full_table_data = [["順位", "資質名", "領域", "スコア", "", "順位", "資質名", "領域", "スコア"]]
     
     ft_cmds = [
-        ('FONT', (0,0), (-1,-1), PDF_FONT_NAME, 9),
+        ('FONT', (0,0), (-1,-1), REGISTERED_FONT_NAME, 9),
         # 左側のスタイル
         ('GRID', (0,0), (3,-1), 0.25, colors.lightgrey),
         ('BACKGROUND', (0,0), (3,0), colors.midnightblue),
@@ -842,6 +846,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
