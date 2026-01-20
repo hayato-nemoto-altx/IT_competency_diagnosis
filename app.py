@@ -703,7 +703,7 @@ with st.form("assessment_form"):
             q_text = item['q']
             theme = item['theme']
             
-            st.write(f"**Q.{i+1}** {q_text}")
+            st.write(f"**Q.{idx+1}** {q_text}")
             ans = st.radio(
                 f"{q_text}",
                 options=[1, 2, 3, 4, 5],
@@ -847,6 +847,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
