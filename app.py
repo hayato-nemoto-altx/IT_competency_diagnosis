@@ -2,20 +2,104 @@ import streamlit as st
 from google import genai
 import pandas as pd
 import random
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.lib.units import mm
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
-# --- 1. APIキーの設定 ---
-# Streamlit CloudのSecrets、またはローカルの環境変数から読み込む設計
-# ローカルでテストする場合は、以下の "ここにAPIキーを入力" を書き換えてください
+# --- 1. 設定と関数定義 ---
+# PDF作成関数
+def create_pdf(name, rank_data, ai_text):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, title="Strength Report")
+    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    jp_style = ParagraphStyle(name='Japanese', fontName='HeiseiKakuGo-W5', fontSize=10, leading=14)
+    title_style = ParagraphStyle(name='JpTitle', fontName='HeiseiKakuGo-W5', fontSize=18, leading=22, alignment=1)
+    h2_style = ParagraphStyle(name='JpH2', fontName='HeiseiKakuGo-W5', fontSize=14, leading=18, spaceBefore=10, spaceAfter=5)
+
+    elements.append(Paragraph(f"ストレングス分析レポート: {name}さん", title_style))
+    elements.append(Spacer(1, 10*mm))
+
+    # スコア上位の表
+    data = [["順位", "資質名", "スコア"]]
+    for rank, (theme, score) in enumerate(rank_data[:10]):
+        data.append([str(rank+1), theme, str(score)])
+    
+    table = Table(data, colWidths=[20*mm, 60*mm, 30*mm])
+    table.setStyle(TableStyle([
+        ('FONT', (0,0), (-1,-1), 'HeiseiKakuGo-W5', 10),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+    ]))
+    elements.append(Paragraph("【上位資質 Top 10】", h2_style))
+    elements.append(table)
+    elements.append(Spacer(1, 10*mm))
+
+    # AI分析
+    elements.append(Paragraph("【AI分析レポート】", h2_style))
+    for line in ai_text.split('\n'):
+        if line.strip():
+            elements.append(Paragraph(line, jp_style))
+        else:
+            elements.append(Spacer(1, 2*mm))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+# ドライブ保存関数
+def save_to_drive(file_obj, filename, folder_id, creds_info):
+    try:
+        creds = service_account.Credentials.from_service_account_info(creds_info)
+        service = build('drive', 'v3', credentials=creds)
+
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id]
+        }
+        # ポインタを先頭に戻してからアップロード
+        file_obj.seek(0)
+        media = MediaIoBaseUpload(file_obj, mimetype='application/pdf', resumable=True)
+
+        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        return file.get('id')
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+st.set_page_config(page_title="簡易ストレングスファインダー", layout="wide")
+# Streamlit CloudのSecretsから読み込む設計
 try:
-    api_key = st.secrets["GEMINI_API_KEY"]
+    gemini_api_key = st.secrets["GEMINI_API_KEY"]
 except:
-    api_key = None
+    gemini_api_key = None
 
-if not api_key:
-    st.warning("⚠️ APIキーが設定されていません。Streamlit Cloudの「Settings > Secrets」に `GEMINI_API_KEY` を設定してください。")
+# Google Drive用の設定読み込み
+try:
+    drive_folder_id = st.secrets["DRIVE_FOLDER_ID"]
+    # secretsの辞書を通常の辞書に変換（gcp_service_accountセクション）
+    gcp_sa_info = dict(st.secrets["gcp_service_account"])
+except:
+    drive_folder_id = None
+    gcp_sa_info = None
+
+if not gemini_api_key:
+    st.warning("⚠️ Gemini APIキーが設定されていません。")
     client = None
 else:
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=gemini_api_key)
 
 # --- 2. 質問データベース（34資質×5問：IT企業・ビジネス研修向け） ---
 QUESTIONS_DB = {
@@ -275,6 +359,7 @@ st.markdown("""
 日常業務やプロジェクトでの行動を思い浮かべながら、直感で回答してください。
 1:全く当てはまらない ... 5:非常によく当てはまる
 """)
+
 st.info("💡 全34資質×5問＝計170問あります。所要時間は約10〜15分です。")
 
 # --- シャッフル処理（セッションステートで固定） ---
@@ -291,6 +376,11 @@ if 'shuffled_questions' not in st.session_state:
     
     # 保存
     st.session_state['shuffled_questions'] = all_questions
+
+st.markdown("### 回答者情報")
+user_name = st.text_input("名前を入力してください", placeholder="例：山田 太郎")
+if user_name:
+    st.caption(f"こんにちは、{user_name}さん。準備ができたら診断を始めてください。")
 
 # 保存されたシャッフル済みリストを取得
 questions_to_display = st.session_state['shuffled_questions']
@@ -337,7 +427,7 @@ with st.form("assessment_form"):
                 index=2,
                 horizontal=True,
                 key=f"q_{idx}",
-                help="1:全く当てはまらない ... 5:非常によく当てはまる"
+                label_visibility="collapsed"
             )
             st.write("---")
             scores[theme] += ans
@@ -346,12 +436,93 @@ with st.form("assessment_form"):
 
 # --- 4. 集計とAI分析 ---
 if submitted:
-    # スコアの降順ソート
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    all_ranks_str = "\n".join([f"{i+1}. {item[0]} ({item[1]}点)" for i, item in enumerate(sorted_scores)])
+    if not user_name:
+        st.error("⚠️ 名前が入力されていません。ページ上部の入力欄に名前を入力してください。")
+        st.stop()
+    else:
+        with st.spinner("AIがあなたの強みを分析し、レポートを作成中...（約30〜60秒かかります）"):
+            # スコア集計
+            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            all_ranks_str = "\n".join([f"{i+1}. {item[0]} ({item[1]}点)" for i, item in enumerate(sorted_scores)])
+
+            ai_text = "（AI分析エラー）"
+            if client:
+                try:
+                    prompt = prompt = f"""
+                    あなたはIT業界に精通した熟練のキャリアコーチ兼HRコンサルタントです。
+                    あるIT従事者{user_name}さんのストレングス診断（全34資質）の結果は以下の通りです。
+                    このデータは「1位」から順に「34位」まで並んでいます。
+                
+                    【全34資質の順位データ】
+                    {all_ranks_str}
+                
+                    【分析依頼】
+                    34資質すべての並び順とスコアのバランスを考慮し、
+                    この人物の「全体像」を深くプロファイリングしてください。
+                    以下の構成でマークダウン形式で出力してください。
+                
+                    ### 1. プロファイル要約（キャッチコピー）
+                    この人物をIT業界の役割で例えると何か？（例：「火消し役の鬼軍曹」「未来を創るアーキテクト」「チームの精神的支柱」など）
+                    その理由を、上位資質と特徴的な中位・下位資質の組み合わせから解説してください。
+                
+                    ### 2. 強みの構造分析（Top Zone）
+                    上位（1〜10位）にある資質がどのように連携して機能しているか。
+                    単体の強みではなく「掛け合わせ」で生まれるパワー（例：着想×戦略性＝イノベーション力）を解説してください。
+                
+                    ### 3. 注意すべき盲点と葛藤（Bottom Zone & Gap）
+                    - 下位（25〜34位）にある資質から予測される、業務上の苦手分野やリスク。
+                    - 「上位にあるが過剰に働きすぎると危険な資質」や「上位資質と下位資質のギャップによる葛藤」（例：責任感は高いが、共感性が低い場合のバーンアウト・衝突リスクなど）について指摘してください。
+                
+                    ### 4. 明日から使えるIT業務アクションプラン
+                    この強み構成を最大限に活かし、弱みをカバーするための具体的な行動指針。
+                    （エンジニアリング、マネジメント、コミュニケーションの観点から）
+                
+                    ---
+                    ※トーン＆マナー：
+                    専門的かつ洞察に富んだ分析を行い、読者が「自分の説明書」を手に入れたと感じるような、納得感と前向きさを与える文章にしてください。
+                    """
+                    response = client.models.generate_content(
+                        model="gemini-3-flash-preview",
+                        contents=prompt,
+                    )
+                    ai_text = response.text
+                except Exception as e:
+                    ai_text = f"AI分析中にエラーが発生しました: {e}"
+
+            #  PDF生成 (メモリ上)
+            pdf_buffer = create_pdf(user_name, sorted_scores, ai_text)
+            pdf_bytes = pdf_buffer.getvalue() # バイナリデータを取り出しておく
+            # 【自動実行】Googleドライブへ保存
+            save_msg = ""
+            if drive_folder_id and gcp_sa_info:
+                # バッファをリセットして渡す
+                pdf_buffer.seek(0)
+                file_id = save_to_drive(pdf_buffer, f"{user_name}_strength_report.pdf", drive_folder_id, gcp_sa_info)
+                if "Error" in str(file_id):
+                    save_msg = f"⚠️ 保存失敗: {file_id}"
+                else:
+                    save_msg = f"✅ 診断結果をバックアップしました (File ID: {file_id})"
+            else:
+                save_msg = "※ドライブ設定がないため保存されませんでした"
+            # 結果をセッションステートに保存 (画面リロード対策)
+            st.session_state['result_data'] = {
+                'name': user_name,
+                'scores': sorted_scores,
+                'ai_text': ai_text,
+                'pdf_bytes': pdf_bytes,
+                'save_msg': save_msg
+            }
+
+if 'result_data' in st.session_state:
+    res = st.session_state['result_data']
 
     st.divider()
-    st.header("🏆 診断結果レポート")
+    st.header(f"🏆 {res['name']}さんの診断結果レポート")
+    # 保存結果の通知
+    if "✅" in res['save_msg']:
+        st.success(res['save_msg'])
+    else:
+        st.warning(res['save_msg'])
     
     # 結果表示用カラム
     r_col1, r_col2 = st.columns([1, 2])
@@ -359,63 +530,26 @@ if submitted:
     with r_col1:
         st.subheader("全34資質の順位")
         # データフレーム化して表示
-        df_all = pd.DataFrame(sorted_scores, columns=["資質名", "スコア"])
+        df_all = pd.DataFrame(res['scores'], columns=["資質名", "スコア"])
         df_all.index = df_all.index + 1 # 1位から表示
         st.dataframe(df_all, height=600, use_container_width=True)
 
     with r_col2:
-        # Geminiへのプロンプト作成        
-        prompt = f"""
-        あなたはIT業界に精通した熟練のキャリアコーチ兼HRコンサルタントです。
-        あるIT従事者のストレングス診断（全34資質）の結果は以下の通りです。
-        このデータは「1位」から順に「34位」まで並んでいます。
+        st.subheader("AI分析レポート")
+        st.markdown(res['ai_text'])
 
-        【全34資質の順位データ】
-        {all_ranks_str}
+    st.divider()
 
-        【分析依頼】
-        34資質すべての並び順とスコアのバランスを考慮し、
-        この人物の「全体像」を深くプロファイリングしてください。
-        以下の構成でマークダウン形式で出力してください。
-
-        ### 1. プロファイル要約（キャッチコピー）
-        この人物をIT業界の役割で例えると何か？（例：「火消し役の鬼軍曹」「未来を創るアーキテクト」「チームの精神的支柱」など）
-        その理由を、上位資質と特徴的な中位・下位資質の組み合わせから解説してください。
-
-        ### 2. 強みの構造分析（Top Zone）
-        上位（1〜10位）にある資質がどのように連携して機能しているか。
-        単体の強みではなく「掛け合わせ」で生まれるパワー（例：着想×戦略性＝イノベーション力）を解説してください。
-
-        ### 3. 注意すべき盲点と葛藤（Bottom Zone & Gap）
-        - 下位（25〜34位）にある資質から予測される、業務上の苦手分野やリスク。
-        - 「上位にあるが過剰に働きすぎると危険な資質」や「上位資質と下位資質のギャップによる葛藤」（例：責任感は高いが、共感性が低い場合のバーンアウト・衝突リスクなど）について指摘してください。
-
-        ### 4. 明日から使えるIT業務アクションプラン
-        この強み構成を最大限に活かし、弱みをカバーするための具体的な行動指針。
-        （エンジニアリング、マネジメント、コミュニケーションの観点から）
-
-        ---
-        ※トーン＆マナー：
-        専門的かつ洞察に富んだ分析を行い、読者が「自分の説明書」を手に入れたと感じるような、納得感と前向きさを与える文章にしてください。
-        """
-
-        st.subheader("🤖 AIによる分析レポート")
-        
-        if not client:
-            st.error("APIキーが設定されていないため実行できません。")
-        else:
-            with st.spinner("AIがあなたの強みを分析し、レポートを作成中...（約30〜60秒かかります）"):
-                try:
-                    response = client.models.generate_content(
-                        model="gemini-3-flash-preview",
-                        contents=prompt,
-                    )
-                    st.markdown(response.text)
-                except Exception as e:
-
-                    st.error(f"分析中にエラーが発生しました: {e}")
-
-
+    # F. 【ユーザー選択】ローカルへの保存ボタン
+    st.subheader("📥 ローカルに保存する")
+    st.write("必要であればここからPDFをダウンロードできます。")
+    
+    st.download_button(
+        label="📄 PDFレポートをダウンロード",
+        data=res['pdf_bytes'],
+        file_name=f"{res['name']}_strength_report.pdf",
+        mime="application/pdf"
+    )
 
 
 
