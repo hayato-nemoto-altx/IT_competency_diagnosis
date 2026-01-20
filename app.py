@@ -6,6 +6,7 @@ import io
 import re
 import numpy as np
 import matplotlib.pyplot as plt
+import japanize_matplotlib
 
 # ReportLab関連
 from reportlab.pdfgen import canvas
@@ -818,6 +819,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
