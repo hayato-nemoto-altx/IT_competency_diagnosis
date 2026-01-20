@@ -86,14 +86,18 @@ try:
 except:
     gemini_api_key = None
 
-# Google Drive用の設定読み込み
-try:
-    drive_folder_id = st.secrets["DRIVE_FOLDER_ID"]
-    # secretsの辞書を通常の辞書に変換（gcp_service_accountセクション）
-    gcp_sa_info = dict(st.secrets["gcp_service_account"])
-except:
-    drive_folder_id = None
-    gcp_sa_info = None
+# Google Drive用の設定読み込み（一時的に無効化）
+# try:
+#     drive_folder_id = st.secrets["DRIVE_FOLDER_ID"]
+#     # secretsの辞書を通常の辞書に変換（gcp_service_accountセクション）
+#     gcp_sa_info = dict(st.secrets["gcp_service_account"])
+# except:
+#     drive_folder_id = None
+#     gcp_sa_info = None
+
+# 変数だけはNoneで定義しておく（エラー回避）
+drive_folder_id = None
+gcp_sa_info = None
 
 if not gemini_api_key:
     st.warning("⚠️ Gemini APIキーが設定されていません。")
@@ -448,7 +452,7 @@ if submitted:
             ai_text = "（AI分析エラー）"
             if client:
                 try:
-                    prompt = prompt = f"""
+                    prompt = f"""
                     あなたはIT業界に精通した熟練のキャリアコーチ兼HRコンサルタントです。
                     あるIT従事者{user_name}さんのストレングス診断（全34資質）の結果は以下の通りです。
                     このデータは「1位」から順に「34位」まで並んでいます。
@@ -492,18 +496,18 @@ if submitted:
             #  PDF生成 (メモリ上)
             pdf_buffer = create_pdf(user_name, sorted_scores, ai_text)
             pdf_bytes = pdf_buffer.getvalue() # バイナリデータを取り出しておく
-            # 【自動実行】Googleドライブへ保存
-            save_msg = ""
-            if drive_folder_id and gcp_sa_info:
-                # バッファをリセットして渡す
-                pdf_buffer.seek(0)
-                file_id = save_to_drive(pdf_buffer, f"{user_name}_strength_report.pdf", drive_folder_id, gcp_sa_info)
-                if "Error" in str(file_id):
-                    save_msg = f"⚠️ 保存失敗: {file_id}"
-                else:
-                    save_msg = f"✅ 診断結果をバックアップしました (File ID: {file_id})"
-            else:
-                save_msg = "※ドライブ設定がないため保存されませんでした"
+            # 【自動実行】Googleドライブへ保存　一時的に無効化
+            # save_msg = ""
+            # if drive_folder_id and gcp_sa_info:
+            #     # バッファをリセットして渡す
+            #     pdf_buffer.seek(0)
+            #     file_id = save_to_drive(pdf_buffer, f"{user_name}_strength_report.pdf", drive_folder_id, gcp_sa_info)
+            #     if "Error" in str(file_id):
+            #         save_msg = f"⚠️ 保存失敗: {file_id}"
+            #     else:
+            #         save_msg = f"✅ 診断結果をバックアップしました (File ID: {file_id})"
+            # else:
+            #     save_msg = "※ドライブ設定がないため保存されませんでした"
             # 結果をセッションステートに保存 (画面リロード対策)
             st.session_state['result_data'] = {
                 'name': user_name,
@@ -518,11 +522,12 @@ if 'result_data' in st.session_state:
 
     st.divider()
     st.header(f"🏆 {res['name']}さんの診断結果レポート")
-    # 保存結果の通知
-    if "✅" in res['save_msg']:
-        st.success(res['save_msg'])
-    else:
-        st.warning(res['save_msg'])
+    
+    # 保存結果の通知 (無効化されているため常にwarningで表示)
+    # if "✅" in res['save_msg']:
+    #     st.success(res['save_msg'])
+    # else:
+    st.warning(res['save_msg'])
     
     # 結果表示用カラム
     r_col1, r_col2 = st.columns([1, 2])
@@ -550,6 +555,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
