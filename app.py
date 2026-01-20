@@ -51,28 +51,27 @@ DOMAIN_BG_COLORS = {
 
 
 
-# --- フォント設定関数 ---
-def setup_japanese_font():
-    # フォルダにあるフォントファイル名を指定
-    font_path = "ipaexg.ttf" 
+# --- フォント設定 ---
+# フォルダにあるフォントファイル名を指定
+font_path = "ipaexg.ttf" 
 
-    if not os.path.exists(font_path):
-        st.error(f"⚠️ エラー: フォントファイル `{font_path}` が見つかりません。")
-        st.info("【解決策】 `ipaexg.ttf` をダウンロードし、`app.py` と同じ場所にアップロードしてください。")
-        st.stop()
+if not os.path.exists(font_path):
+    st.error(f"⚠️ エラー: フォントファイル `{font_path}` が見つかりません。")
+    st.info("【解決策】 `ipaexg.ttf` をダウンロードし、`app.py` と同じ場所にアップロードしてください。")
+    st.stop()
 
-    # Matplotlib用のフォント設定
-    fm.fontManager.addfont(font_path)
-    font_prop = fm.FontProperties(fname=font_path)
-    plt.rcParams['font.family'] = font_prop.get_name()
+# Matplotlib用のフォント設定
+fm.fontManager.addfont(font_path)
+font_prop = fm.FontProperties(fname=font_path)
+plt.rcParams['font.family'] = font_prop.get_name()
         
-    # ReportLab用のフォント登録（埋め込みフォントとして登録）
-    try:
-        pdfmetrics.registerFont(TTFont('IPAexGothic', font_path))
-        PDF_FONT_NAME = 'IPAexGothic' # 成功したらこのフォント名を使う
-    except:
-        st.error(f"フォント登録エラー: {e}")
-        st.stop()
+# ReportLab用のフォント登録（埋め込みフォントとして登録）
+try:
+    pdfmetrics.registerFont(TTFont('IPAexGothic', font_path))
+    PDF_FONT_NAME = 'IPAexGothic' # 成功したらこのフォント名を使う
+except:
+    st.error(f"フォント登録エラー: {e}")
+    st.stop()
 
 # レーダーチャート作成関数
 def create_radar_chart(scores_by_domain):
@@ -843,6 +842,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
