@@ -684,14 +684,14 @@ with st.form("assessment_form"):
             q_text = item['q']
             theme = item['theme']
             
-            st.write(f"**Q.{i+1}**") # 質問番号
+            st.write(f"**Q.{i+1}** {q_text}") # 質問番号
             ans = st.radio(
                 f"{q_text}",
                 options=[1, 2, 3, 4, 5],
                 index=2, # デフォルト3
                 horizontal=True,
                 key=f"q_{i}", # ユニークなキー
-                help="1:全く当てはまらない ... 5:非常によく当てはまる"
+                label_visibility="collapsed"
             )
             st.write("---") # 区切り線
             scores[theme] += ans # スコア加算
@@ -703,7 +703,7 @@ with st.form("assessment_form"):
             q_text = item['q']
             theme = item['theme']
             
-            st.write(f"**Q.{idx+1}**")
+            st.write(f"**Q.{i+1}** {q_text}")
             ans = st.radio(
                 f"{q_text}",
                 options=[1, 2, 3, 4, 5],
@@ -847,6 +847,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
