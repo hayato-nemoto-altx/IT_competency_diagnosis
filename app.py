@@ -14,6 +14,8 @@ from reportlab.lib import colors
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+import re
 
 # --- 1. 設定と関数定義 ---
 # PDF作成関数
@@ -33,27 +35,60 @@ def create_pdf(name, rank_data, ai_text):
 
     # スコア上位の表
     data = [["順位", "資質名", "スコア"]]
-    for rank, (theme, score) in enumerate(rank_data[:10]):
+    for rank, (theme, score) in enumerate(rank_data[:34]):
         data.append([str(rank+1), theme, str(score)])
     
     table = Table(data, colWidths=[20*mm, 60*mm, 30*mm])
     table.setStyle(TableStyle([
         ('FONT', (0,0), (-1,-1), 'HeiseiKakuGo-W5', 10),
         ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
         ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
     ]))
-    elements.append(Paragraph("【上位資質 Top 10】", h2_style))
+    elements.append(Paragraph("【資質スコア順位】", h2_style))
     elements.append(table)
     elements.append(Spacer(1, 10*mm))
-
+    elements.append(PageBreak())
     # AI分析
-    elements.append(Paragraph("【AI分析レポート】", h2_style))
-    for line in ai_text.split('\n'):
-        if line.strip():
-            elements.append(Paragraph(line, jp_style))
+    elements.append(Paragraph("【AI分析レポート】", title_style))
+    elements.append(Spacer(1, 5*mm))
+    lines = ai_text.split('\n')
+    is_first_header = True
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+
+        if line.startswith('###'):
+            clean_text = line.replace('###', '').strip()
+            
+            # 最初の見出し以外（2つ目以降の見出し）の場合に改ページする
+            if not is_first_header:
+                elements.append(PageBreak())
+            
+            elements.append(Paragraph(clean_text, h2_style))
+            is_first_header = False # 2回目以降は改ページ有効にする
+        
+        elif line.startswith('##'):
+            clean_text = line.replace('##', '').strip()
+            if not is_first_header:
+                elements.append(PageBreak())
+            elements.append(Paragraph(clean_text, h2_style))
+            is_first_header = False
+
+        elif line.startswith('- ') or line.startswith('* '):
+            clean_text = line[2:].strip()
+            elements.append(Paragraph(f"• {clean_text}", jp_style))
+
         else:
-            elements.append(Spacer(1, 2*mm))
+            elements.append(Paragraph(line, jp_style))
+        
+        elements.append(Spacer(1, 2*mm))
 
     doc.build(elements)
     buffer.seek(0)
@@ -556,6 +591,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
