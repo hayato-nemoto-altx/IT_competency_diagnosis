@@ -496,6 +496,7 @@ if submitted:
             #  PDF生成 (メモリ上)
             pdf_buffer = create_pdf(user_name, sorted_scores, ai_text)
             pdf_bytes = pdf_buffer.getvalue() # バイナリデータを取り出しておく
+            save_msg = "※バックアップ保存機能は無効化されています"
             # 【自動実行】Googleドライブへ保存　一時的に無効化
             # save_msg = ""
             # if drive_folder_id and gcp_sa_info:
@@ -555,6 +556,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
