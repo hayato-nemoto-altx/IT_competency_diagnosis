@@ -98,7 +98,7 @@ def create_radar_chart(scores_by_domain):
     
     # Y軸の目盛り（グリッド）設定
     max_val = max(values) if values else 25 # 最大値に応じて調整（ここでは適当に25）
-    ax.set_ylim(0, max_val + (max_val * 0.1))
+    ax.set_ylim(5, max_val + (max_val * 0.1))
     yticks = np.linspace(0, max_val, 5) # 5分割
     ax.set_yticks(yticks)
     ax.set_yticklabels([]) # 数値は表示しない
@@ -848,6 +848,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_strength_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
