@@ -246,6 +246,10 @@ def create_pdf(name, role_name, all_ranked_data, category_scores, ai_text):
     col_widths = [10*mm, 35*mm, 20*mm, 12*mm] * 2
     col_widths.insert(4, 10*mm)
     full_table = Table(full_table_data, colWidths=col_widths, repeatRows=1)
+    
+    # ai_textがNoneの場合のガード処理を追加
+    if not ai_text: ai_text = "AI分析レポートはありません。"
+    
     full_table.setStyle(TableStyle(ft_cmds))
     elements.append(full_table)
     
@@ -638,3 +642,4 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
