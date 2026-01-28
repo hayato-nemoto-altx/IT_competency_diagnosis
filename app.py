@@ -653,9 +653,10 @@ if 'result_data' in st.session_state:
     st.download_button(
         label="📄 PDFレポートをダウンロード",
         data=res['pdf_bytes'],
-        file_name=f"{res['name']}_{res['role']}_report.pdf",
+        file_name=f"{res['name']}_competency_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
