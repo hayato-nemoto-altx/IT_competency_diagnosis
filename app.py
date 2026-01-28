@@ -33,16 +33,16 @@ CATEGORY_NAMES = ["技術・実務", "仕事の進め方", "対人・組織"]
 
 # カテゴリごとの色設定（レーダーチャート用）
 CATEGORY_COLORS_RT = {
-    "技術・実務": "#3498db",   # 青（Tech）
-    "仕事の進め方": "#9b59b6", # 紫（Process）
-    "対人・組織": "#e67e22"    # オレンジ（Human）
+    "技術・実務": "#34495e",   # 青（Tech）
+    "仕事の進め方": "#7f8c8d", # 紫（Process）
+    "対人・組織": "#d35400"    # オレンジ（Human）
 }
 
 # PDF用背景色
 CATEGORY_BG_COLORS = {
-    "技術・実務": colors.aliceblue,
-    "仕事の進め方": colors.lavender,
-    "対人・組織": colors.linen
+    "技術・実務": HexColor('#f2f4f6'),,
+    "仕事の進め方": HexColor('#f5f5f5'),
+    "対人・組織": HexColor('#fae5d3')
 }
 
 # 項目のカテゴリマッピング（どの項目がどのカテゴリに属するか）
@@ -108,7 +108,7 @@ def create_radar_chart(scores_by_category):
     fig, ax = plt.subplots(figsize=(4, 4), subplot_kw=dict(polar=True))
     
     # 軸の設定
-    max_val = max(values) if values and max(values) > 0 else 50 # デフォルト
+    max_val = 50
     ax.set_ylim(0, max_val + (max_val * 0.1))
     ax.set_yticks(np.linspace(0, max_val, 4))
     ax.set_yticklabels([])
@@ -644,6 +644,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
