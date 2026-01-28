@@ -109,7 +109,7 @@ def create_radar_chart(scores_by_category):
     fig, ax = plt.subplots(figsize=(4, 4), subplot_kw=dict(polar=True))
     
     # 軸の設定
-    max_val = 50
+    max_val = max(values) if values and max(values) > 0 else 50
     ax.set_ylim(0, max_val + (max_val * 0.1))
     ax.set_yticks(np.linspace(0, max_val, 4))
     ax.set_yticklabels([])
@@ -645,6 +645,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
