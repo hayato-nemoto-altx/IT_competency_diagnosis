@@ -459,13 +459,25 @@ if not gemini_api_key:
 else:
     client = genai.Client(api_key=gemini_api_key)
 
-# サイドバー：職種選択
-st.sidebar.title("🛠 設定")
+# --- サイドバー：設定（職種・名前） ---
+st.sidebar.title("🛠 情報入力")
+
+# 1. 名前入力
+st.sidebar.subheader("👤 回答者情報")
+user_name = st.sidebar.text_input(
+    "氏名を入力してください",
+    placeholder="例：山田 太郎"
+)
+
+st.sidebar.markdown("---")
+
+# 1. 職種選択
 selected_role = st.sidebar.selectbox(
     "あなたの職種を選択してください",
     options=list(ROLE_CONFIG.keys())
 )
 
+# --- メインエリア表示 ---
 st.title(f"💻 IT職種別コンピテンシー診断：{selected_role}編")
 st.markdown("""
 この診断は、あなたの業務における行動特性や強みを分析するためのツールです。
@@ -473,9 +485,6 @@ st.markdown("""
 **1:全く当てはまらない ... 5:非常によく当てはまる**
 """)
 st.info(f"💡 {selected_role}向けの30項目×5問＝計150問あります。")
-
-st.markdown("### 回答者情報")
-user_name = st.text_input("名前を入力してください", placeholder="例：山田 太郎")
 
 # 質問データの準備
 session_key = f"shuffled_questions_{selected_role}"
@@ -647,6 +656,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
