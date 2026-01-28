@@ -18,7 +18,7 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.lib.units import mm, cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
-from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # Google API関連
@@ -644,6 +644,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
