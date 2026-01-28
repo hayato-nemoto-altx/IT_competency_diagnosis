@@ -40,7 +40,7 @@ CATEGORY_COLORS_RT = {
 
 # PDF用背景色
 CATEGORY_BG_COLORS = {
-    "技術・実務": HexColor('#f2f4f6'),,
+    "技術・実務": HexColor('#f2f4f6'),
     "仕事の進め方": HexColor('#f5f5f5'),
     "対人・組織": HexColor('#fae5d3')
 }
@@ -644,6 +644,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
