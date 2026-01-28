@@ -562,7 +562,7 @@ if submitted:
                     あなたはIT業界の熟練キャリアコーチです。
                     **「{selected_role}」** として働く {user_name} さんの行動特性診断（30項目）の結果を分析します。
                     
-                    【全30項目のスコア順位】
+                    【全30項目のスコア順位】(スコアの幅は5～25)
                     {all_ranks_str}
 
                     【分析依頼】
@@ -656,6 +656,7 @@ if 'result_data' in st.session_state:
         file_name=f"{res['name']}_{res['role']}_report.pdf",
         mime="application/pdf"
     )
+
 
 
 
